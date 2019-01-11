@@ -66,7 +66,7 @@ The websocket server is listening on port 81. Everything that you send via the w
 The software also includes a simple HTML interface for the websocket connection. Connect with a browser to the bot to see it. The websocket connection is automatically established in the background. Type a command and press enter to send the command. The results are automatically displayed. You can disconnect by typing /disconnect or clear the screen by typing /clear.
 
 ### Command Syntax
-Send help to the bot to see an overview of all commands or send help commandname to get help for a specific command. Neato also offers a programmers manual: https://www.neatorobotics.com/resources/programmersmanual_20140305.pdf
+Send help to the bot to see an overview of all commands or send help commandname to get help for a specific command. Neato also offers a [programmers manual](/doc/programmersmanual_20140305.pdf)
 
 ## Known Issues and Limitations
 * Only one user can be connected at the same time. If a new user connects, the old user is disconnected. This is intentional and by design to prevent issues with the bot and data corruption with multiple users.
