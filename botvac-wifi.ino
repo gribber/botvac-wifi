@@ -10,7 +10,7 @@
 #include <ESP8266HTTPUpdateServer.h>
 #include <ESP8266HTTPClient.h>
 
-#define FIRMWARE_VERSION "1.0"
+#define FIRMWARE_VERSION "1.1"
 
 #define SSID_FILE "etc/ssid"
 #define PASSWORD_FILE "etc/pass"
@@ -73,24 +73,19 @@ void serverEvent() {
 
 void setupEvent() {
   char ssid[256];
+  char passwd[256];
+
   File ssid_file = SPIFFS.open(SSID_FILE, "r");
   if(!ssid_file) {
-    strcpy(ssid, "XXX");
+    strcpy(ssid, "");
+    strcpy(passwd, "");
   }
   else {
     ssid_file.readString().toCharArray(ssid, 256);
     ssid_file.close();
+    strcpy(passwd, "********");
   }
 
-  char passwd[256];
-  File passwd_file = SPIFFS.open(PASSWORD_FILE, "r");
-  if(!passwd_file) {
-    strcpy(passwd, "XXX");
-  }
-  else {
-    passwd_file.readString().toCharArray(passwd, 256);
-    passwd_file.close();
-  }
   server.send(200, "text/html", String() +
   "<!DOCTYPE html><html> <body>" +
   "<p>Neato Botvac 85 connected (fw: <b>" + FIRMWARE_VERSION + "</b>)</p>" +
