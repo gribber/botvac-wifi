@@ -2,18 +2,17 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
-#include <WiFiClient.h>
-#include <ArduinoOTA.h>
 #include <WebSocketsServer.h>
 #include <FS.h>
-#include <WiFiUdp.h>
 #include <ESP8266HTTPUpdateServer.h>
-#include <ESP8266HTTPClient.h>
 
-#define FIRMWARE_VERSION "1.1"
+#define FIRMWARE_VERSION "1.2"
 
 #define SSID_FILE "etc/ssid"
 #define PASSWORD_FILE "etc/pass"
+#define SSID_MAX 32
+#define PASSWD_MAX 64
+
 
 #define CONNECT_TIMEOUT_SECS 30
 
@@ -21,8 +20,8 @@
 
 #define MAX_BUFFER 8192
 
-
-WiFiClient client;
+char ssid[SSID_MAX+1];
+char passwd[PASSWD_MAX+1];
 int bufferSize = 0;
 uint8_t currentClient = 0;
 uint8_t serialBuffer[8193];
@@ -72,23 +71,9 @@ void serverEvent() {
 }
 
 void setupEvent() {
-  char ssid[256];
-  char passwd[256];
-
-  File ssid_file = SPIFFS.open(SSID_FILE, "r");
-  if(!ssid_file) {
-    strcpy(ssid, "");
-    strcpy(passwd, "");
-  }
-  else {
-    ssid_file.readString().toCharArray(ssid, 256);
-    ssid_file.close();
-    strcpy(passwd, "********");
-  }
-
   server.send(200, "text/html", String() +
   "<!DOCTYPE html><html> <body>" +
-  "<p>Neato Botvac 85 connected (fw: <b>" + FIRMWARE_VERSION + "</b>)</p>" +
+  "<p>Neato Botvac 85 connected (IP: " + WiFi.localIP().toString() + ", FW: " + FIRMWARE_VERSION + ")</p>" +
   "<form action=\"\" method=\"post\" style=\"display: inline;\">" +
   "Access Point SSID:<br />" +
   "<input type=\"text\" name=\"ssid\" value=\"" + ssid + "\"> <br />" +
@@ -101,7 +86,7 @@ void setupEvent() {
   "</form>" +
   "<p>Enter the details for your access point. After you submit, the controller will reboot to apply the settings.</p>" +
   "<p><a href=\"http://neato.local:82/update\">Update Firmware</a></p>" +
-  "<p><a href=\"http://neato.local/console\">Neato Serial Console</a> - <a href=\"https://www.neatorobotics.com/resources/programmersmanual_20140305.pdf\">Command Documentation</a></p>" +
+  "<p><a href=\"http://neato.local/console\">Neato Serial Console</a> - <a href=\"https://github.com/YustasSwamp/botvac-wifi/blob/master/doc/programmersmanual_20140305.pdf\">Command Documentation</a></p>" +
   "</body></html>\n");
 }
 
@@ -109,6 +94,7 @@ void saveEvent() {
   String user_ssid = server.arg("ssid");
   String user_password = server.arg("password");
   SPIFFS.format();
+  SPIFFS.begin();
   if(user_ssid != "" && user_password != "") {
     File ssid_file = SPIFFS.open(SSID_FILE, "w");
     if (!ssid_file) {
@@ -202,18 +188,19 @@ void setup() {
 
   if(SPIFFS.exists(SSID_FILE) && SPIFFS.exists(PASSWORD_FILE)) {
     File ssid_file = SPIFFS.open(SSID_FILE, "r");
-    char ssid[256];
-    ssid_file.readString().toCharArray(ssid, 256);
+    ssid_file.readString().toCharArray(ssid, SSID_MAX);
     ssid_file.close();
     File passwd_file = SPIFFS.open(PASSWORD_FILE, "r");
-    char passwd[256];
-    passwd_file.readString().toCharArray(passwd, 256);
+    passwd_file.readString().toCharArray(passwd, PASSWD_MAX);
     passwd_file.close();
+    SPIFFS.end();
 
     // attempt station connection
     WiFi.disconnect();
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, passwd);
+    // clobber the password
+    strcpy(passwd, "********");
     for(int i = 0; i < CONNECT_TIMEOUT_SECS * 20 && WiFi.status() != WL_CONNECTED; i++) {
       delay(50);
     }
@@ -233,33 +220,6 @@ void setup() {
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 
-  //OTA update hooks
-  ArduinoOTA.onStart([]() {
-    SPIFFS.end();
-    webSocket.sendTXT(currentClient, "ESP8266: OTA Update Starting\n");
-  });
-
-  ArduinoOTA.onEnd([]() {
-    SPIFFS.begin();
-    webSocket.sendTXT(currentClient, "ESP8266: OTA Update Complete\n");
-  });
-
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    webSocket.sendTXT(currentClient, "ESP8266: OTA Progress: %u%%\r", (progress / (total / 100)));
-  });
-
-  ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) Serial.println("ESP8266: OTA Auth Failed");
-    else if (error == OTA_BEGIN_ERROR) Serial.println("ESP8266: OTA Begin Failed");
-    else if (error == OTA_CONNECT_ERROR) Serial.println("ESP8266: OTA Connect Failed");
-    else if (error == OTA_RECEIVE_ERROR) Serial.println("ESP8266: OTA Receive Failed");
-    else if (error == OTA_END_ERROR) Serial.println("ESP8266: OTA End Failed");
-  });
-
-//  ArduinoOTA.setHostname("neato");
-//  ArduinoOTA.setPassword("neato");
-  ArduinoOTA.begin();
   httpUpdater.setup(&updateServer);
   updateServer.begin();
 
@@ -279,12 +239,9 @@ void setup() {
   MDNS.addService("http", "tcp", 80);
   MDNS.addService("ws", "tcp", 81);
   MDNS.addService("http", "tcp", 82);
-
-  webSocket.sendTXT(currentClient, "ESP8266: Ready\n");
 }
 
 void loop() {
-  ArduinoOTA.handle();
   webSocket.loop();
   server.handleClient();
   updateServer.handleClient();

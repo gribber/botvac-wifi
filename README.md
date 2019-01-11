@@ -55,7 +55,7 @@ Install all software according to the documentation. Depending on what module/pr
 If you haven't already, check out this repository and open the botvac-wifi.ino file in the Arduino IDE. Replace the XXX with your WiFi SSID and password. Connect the ESP module to the computer and click the right-facing arrow to compile and upload the software to the ESP module.
 
 ## Usage
-The software includes multicast DNS (mDNS), so you should be able to connect to the bot with http://botvac.local for a simple websocket interface or use ws://botvac.local:81 for a direct websocket connection. Alternatively you can check your DHCP to find out the IP adress of the bot.
+The software includes multicast DNS (mDNS), so you should be able to connect to the bot with http://neato.local for a simple websocket interface or use ws://neato.local:81 for a direct websocket connection. Alternatively you can check your DHCP to find out the IP adress of the bot.
 
 For convenience and safety purposes, "TestMode off" is always send to the bot if a user disconnects.
 
