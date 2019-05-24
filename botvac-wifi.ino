@@ -111,7 +111,7 @@ void setup() {
   // start wifi
   WiFi.disconnect();
   WiFi.mode(WIFI_STA);
-  WiFi.hostname(WIFI_HOSTNAME)
+  WiFi.hostname(WIFI_HOSTNAME);
   WiFi.begin(SSID, PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
