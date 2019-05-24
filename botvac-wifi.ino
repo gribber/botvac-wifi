@@ -15,7 +15,7 @@ int maxBuffer = 8192;
 int bufferSize = 0;
 uint8_t currentClient = 0;
 uint8_t serialBuffer[8193];
-ESP8266WebServer server = ESP8266WebServer(80);
+ESP8266WebServer server (80);
 WebSocketsServer webSocket = WebSocketsServer(81);
 
 void botDissconect() {
