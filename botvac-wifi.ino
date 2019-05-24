@@ -8,7 +8,8 @@
 #include <Hash.h>
 
 #define SSID "XXX"
-#define PASSWORT "XXX"
+#define PASSWORD "XXX"
+#define WIFI_HOSTNAME "XXX"
 
 WiFiClient client;
 int maxBuffer = 8192;
@@ -110,7 +111,8 @@ void setup() {
   // start wifi
   WiFi.disconnect();
   WiFi.mode(WIFI_STA);
-  WiFi.begin(SSID, PASSWORT);
+  WiFi.hostname(WIFI_HOSTNAME)
+  WiFi.begin(SSID, PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
   }
