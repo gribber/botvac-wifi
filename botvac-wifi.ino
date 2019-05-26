@@ -10,7 +10,7 @@
 
 #define SSID_FILE "etc/ssid"
 #define PASSWORD_FILE "etc/pass"
-#define HOMENAME_FILE "etc/wifihostname"
+#define HOSTNAME_FILE "etc/wifihostname"
 #define SSID_MAX 32
 #define PASSWD_MAX 64
 #define HOSTNAME_MAX 32
@@ -24,6 +24,7 @@
 
 char ssid[SSID_MAX+1];
 char passwd[PASSWD_MAX+1];
+char hostname[SSID_MAX+1];
 int bufferSize = 0;
 uint8_t currentClient = 0;
 uint8_t serialBuffer[8193];
