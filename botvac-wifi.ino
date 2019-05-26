@@ -2,22 +2,35 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
-#include <WiFiClient.h>
-#include <ArduinoOTA.h>
 #include <WebSocketsServer.h>
-#include <Hash.h>
+#include <FS.h>
+#include <ESP8266HTTPUpdateServer.h>
 
-#define SSID "XXX"
-#define PASSWORD "XXX"
-#define WIFI_HOSTNAME "XXX"
+#define FIRMWARE_VERSION "1.3"
 
-WiFiClient client;
-int maxBuffer = 8192;
+#define SSID_FILE "etc/ssid"
+#define PASSWORD_FILE "etc/pass"
+#define HOMENAME_FILE "etc/wifihostname"
+#define SSID_MAX 32
+#define PASSWD_MAX 64
+#define HOSTNAME_MAX 32
+
+
+#define CONNECT_TIMEOUT_SECS 30
+
+#define AP_SSID "neato"
+
+#define MAX_BUFFER 8192
+
+char ssid[SSID_MAX+1];
+char passwd[PASSWD_MAX+1];
 int bufferSize = 0;
 uint8_t currentClient = 0;
 uint8_t serialBuffer[8193];
-ESP8266WebServer server (80);
+ESP8266WebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(81);
+ESP8266WebServer updateServer(82);
+ESP8266HTTPUpdateServer httpUpdater;
 
 void botDissconect() {
   // always disable testmode on disconnect
@@ -59,6 +72,77 @@ void serverEvent() {
   server.send(200, "text/html", "<!DOCTYPE html><meta charset='utf-8' /><style>p{white-space:pre;word-wrap:break-word;font-family:monospace;}</style><title>Neato Console</title><script language='javascript' type='text/javascript'>var b='ws://'+location.hostname+':81/',c,d,e;function g(){d=new WebSocket(b);d.onopen=function(){h('[connected]')};d.onclose=function(){h('[disconnected]')};d.onmessage=function(a){h('<span style=\"color: blue;\">[response] '+a.data+'</span>')};d.onerror=function(a){h('<span style=\"color: red;\">[error] </span> '+a.data)}}\nfunction k(a){if(13==a.keyCode){a=e.value;if('/disconnect'==a)d.close();else if('/clear'==a)for(;c.firstChild;)c.removeChild(c.firstChild);else''!=a&&(h('[sent] '+a),d.send(a));e.value='';e.focus()}}function h(a){var f=document.createElement('p');f.innerHTML=a;c.appendChild(f);window.scrollTo(0,document.body.scrollHeight)}\nwindow.addEventListener('load',function(){c=document.getElementById('c');e=document.getElementById('i');g();document.getElementById('i').addEventListener('keyup',k,!1);e.focus()},!1);</script><h2>Neato Console</h2><div id='c'></div><input type='text' id='i' style=\"width:100%;font-family:monospace;\">\n");
 }
 
+void setupEvent() {
+  server.send(200, "text/html", String() +
+  "<!DOCTYPE html><html> <body>" +
+  "<p>Neato Botvac 85 connected (IP: " + WiFi.localIP().toString() + ", FW: " + FIRMWARE_VERSION + ")</p>" +
+  "<form action=\"\" method=\"post\" style=\"display: inline;\">" +
+  "Access Point SSID:<br />" +
+  "<input type=\"text\" name=\"ssid\" value=\"" + ssid + "\"> <br />" +
+  "WPA2 Password:<br />" +
+  "<input type=\"text\" name=\"password\" value=\"" + passwd + "\"> <br />" +
+  "WIFI hostname:<br />" +
+  "<input type=\"text\" name=\"hostname\" value=\"" + hostname + "\"> <br />" +
+  "<br />" +
+  "<input type=\"submit\" value=\"Submit\"> </form>" +
+  "<form action=\"http://neato.local/reboot\" style=\"display: inline;\">" +
+  "<input type=\"submit\" value=\"Reboot\" />" +
+  "</form>" +
+  "<p>Enter the details for your access point. After you submit, the controller will reboot to apply the settings.</p>" +
+  "<p><a href=\"http://neato.local:82/update\">Update Firmware</a></p>" +
+  "<p><a href=\"http://neato.local/console\">Neato Serial Console</a> - <a href=\"https://github.com/gribber/botvac-wifi/blob/master/doc/programmersmanual_20140305.pdf\">Command Documentation</a></p>" +
+  "</body></html>\n");
+}
+
+void saveEvent() {
+  String user_ssid = server.arg("ssid");
+  String user_password = server.arg("password");
+  String user_hostname = server.arg("hostname");
+  SPIFFS.format();
+  SPIFFS.begin();
+  if(user_ssid != "" && user_password != "" && user_hostname != "") {
+    File ssid_file = SPIFFS.open(SSID_FILE, "w");
+    if (!ssid_file) {
+      server.send(200, "text/html", "<!DOCTYPE html><html> <body> Setting Access Point SSID failed!</body> </html>");
+      return;
+    }
+    ssid_file.print(user_ssid);
+    ssid_file.close();
+    File passwd_file = SPIFFS.open(PASSWORD_FILE, "w");
+    if (!passwd_file) {
+      server.send(200, "text/html", "<!DOCTYPE html><html> <body> Setting Access Point password failed!</body> </html>");
+      return;
+    }
+    passwd_file.print(user_password);
+    passwd_file.close();
+    File hostname_file = SPIFFS.open(HOSTNAME_FILE, "w");
+    if (!hostname_file) {
+      server.send(200, "text/html", "<!DOCTYPE html><html> <body> Setting Access Point hostname failed!</body> </html>");
+      return;
+    }
+    hostname_file.print(user_hostname);
+    hostname_file.close();
+
+    server.send(200, "text/html", String() +
+    "<!DOCTYPE html><html> <body>" +
+    "Setting Access Point SSID / password was successful! <br />" +
+    "<br />SSID was set to \"" + user_ssid + "\" with the password \"" + user_password + "\" and hostname \"" + user_hostname + "\". <br />" +
+    "<br /> The controller will now reboot. Please re-connect to your Wi-Fi network.<br />" +
+    "If the SSID or password was incorrect, the controller will return to Access Point mode." +
+    "</body> </html>");
+    ESP.reset();
+  }
+}
+
+void rebootEvent() {
+  server.send(200, "text/html", String() +
+  "<!DOCTYPE html><html> <body>" +
+  "The controller will now reboot.<br />" +
+  "If the SSID or password is set but is incorrect, the controller will return to Access Point mode." +
+  "</body> </html>");
+  ESP.reset();
+}
+
 void serialEvent() {
   while (Serial.available() > 0) {
     char in = Serial.read();
@@ -71,11 +155,11 @@ void serialEvent() {
     }
     serialBuffer[bufferSize] = in;
     bufferSize++;
-    // fill up the serial buffer until its max size (8192 bytes, see maxBuffer) 
+    // fill up the serial buffer until its max size (8192 bytes, see MAX_BUFFER)
     // or unitl the end of file marker (ctrl-z; \x1A) is reached
-    // a worst caste lidar result should be just under 8k, so that maxBuffer 
+    // a worst caste lidar result should be just under 8k, so that MAX_BUFFER
     // limit should not be reached under normal conditions
-    if (bufferSize > maxBuffer - 1 || in == '\x1A') {
+    if (bufferSize > MAX_BUFFER - 1 || in == '\x1A') {
       serialBuffer[bufferSize] = '\0';
       bool allSend = false;
       uint8_t localBuffer[1464];
@@ -108,43 +192,74 @@ void setup() {
   // botvac serial console is 115200 baud, 8 data bits, no parity, one stop bit (8N1)
   Serial.begin(115200);
 
-  // start wifi
-  WiFi.disconnect();
-  WiFi.mode(WIFI_STA);
-  WiFi.hostname(WIFI_HOSTNAME);
-  WiFi.begin(SSID, PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+  //try to mount the filesystem. if that fails, format the filesystem and try again.
+  if(!SPIFFS.begin()) {
+    SPIFFS.format();
+    SPIFFS.begin();
   }
 
-  ArduinoOTA.setHostname("neato");
-  ArduinoOTA.setPassword("neato");
-  ArduinoOTA.begin();
+  if(SPIFFS.exists(SSID_FILE) && SPIFFS.exists(PASSWORD_FILE)) {
+    File ssid_file = SPIFFS.open(SSID_FILE, "r");
+    ssid_file.readString().toCharArray(ssid, SSID_MAX);
+    ssid_file.close();
+    File passwd_file = SPIFFS.open(PASSWORD_FILE, "r");
+    passwd_file.readString().toCharArray(passwd, PASSWD_MAX);
+    passwd_file.close();
+    File hostname_file = SPIFFS.open(HOSTNAME_FILE, "r");
+    hostname_file.readString().toCharArray(hostname, HOSTNAME_MAX);
+    hostname_file.close();
+    SPIFFS.end();
+
+    // attempt station connection
+    WiFi.disconnect();
+    WiFi.mode(WIFI_STA);
+    WiFi.hostname(hostname);
+    WiFi.begin(ssid, passwd);
+    // clobber the password
+    strcpy(passwd, "********");
+    for(int i = 0; i < CONNECT_TIMEOUT_SECS * 20 && WiFi.status() != WL_CONNECTED; i++) {
+      delay(50);
+    }
+  }
+
+
+  //start AP mode if either the AP / password do not exist, or cannot be connected to within CONNECT_TIMEOUT_SECS seconds.
+  if(WiFi.status() != WL_CONNECTED) {
+    WiFi.disconnect();
+    WiFi.mode(WIFI_AP);
+    if(! WiFi.softAP(AP_SSID)) {
+      ESP.reset(); //reset because there's no good reason for setting up an AP to fail
+    }
+  }
 
   // start websocket
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 
+  httpUpdater.setup(&updateServer);
+  updateServer.begin();
+
   // start webserver
-  server.on("/", serverEvent);
+  server.on("/console", serverEvent);
+  server.on("/", HTTP_POST, saveEvent);
+  server.on("/", HTTP_GET, setupEvent);
+  server.on("/reboot", HTTP_GET, rebootEvent);
   server.onNotFound(serverEvent);
   server.begin();
 
   // start MDNS
   // this means that the botvac can be reached at http://neato.local or ws://neato.local:81
   if (!MDNS.begin("neato")) {
-    while (1) {
-      // wait for watchdog timer
-      delay(500);
-    }
+    ESP.reset(); //reset because there's no good reason for setting up MDNS to fail
   }
   MDNS.addService("http", "tcp", 80);
   MDNS.addService("ws", "tcp", 81);
+  MDNS.addService("http", "tcp", 82);
 }
 
 void loop() {
-  ArduinoOTA.handle();
   webSocket.loop();
   server.handleClient();
+  updateServer.handleClient();
   serialEvent();
 }
